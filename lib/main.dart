@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-// Geolocatorのパッケージをインポートする
+// geolocatorをインポートする
 import 'package:geolocator/geolocator.dart';
 
 void main() {
@@ -31,9 +32,19 @@ class _MapViewState extends State<MapView> {
   CameraPosition _initialLocation = CameraPosition(target: LatLng(0.0, 0.0));
   // マップの表示制御用
   late GoogleMapController mapController;
-
   // 現在位置の記憶用
   late Position _currentPosition;
+
+  // 場所の記憶用
+  final startAddressController = TextEditingController();
+  final destinationAddressController = TextEditingController();
+  final startAddressFocusNode = FocusNode();
+  final desrinationAddressFocusNode = FocusNode();
+  String _currentAddress = '';
+  String _startAddress = '';
+  String _destinationAddress = '';
+  String? _placeDistance;
+  Set<Marker> markers = {};
 
   // 現在位置の取得方法
   _getCurrentLocation() async {
@@ -55,7 +66,7 @@ class _MapViewState extends State<MapView> {
           ),
         );
       });
-      // await _getAddress();
+      await _getAddress();
     }).catchError((e) {
       print(e);
     });
@@ -65,6 +76,83 @@ class _MapViewState extends State<MapView> {
   void initState() {
     super.initState();
     _getCurrentLocation();
+  }
+
+  // アドレスの取得方法
+  _getAddress() async {
+    try {
+      // 座標を使用して場所を取得する
+      List<Placemark> p = await placemarkFromCoordinates(
+          _currentPosition.latitude, _currentPosition.longitude);
+
+      // 最も確率の高い結果を取得
+      Placemark place = p[0];
+
+      setState(() {
+
+        // アドレスの構造化
+        _currentAddress =
+        "${place.name}, ${place.locality}, ${place.postalCode}, ${place.country}";
+
+        // TextFieldのテキストを更新
+        startAddressController.text = _currentAddress;
+
+        // ユーザーの現在地を出発地とする設定
+        _startAddress = _currentAddress;
+      });
+    } catch (e) {
+      print(e);
+    }
+  }
+
+  // UI表示用
+  Widget _textField({
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required String label,
+    required String hint,
+    required double width,
+    required Icon prefixIcon,
+    Widget? suffixIcon,
+    required Function(String) locationCallback,
+  }) {
+    return Container(
+      width: width * 0.8,
+      child: TextField(
+        onChanged: (value) {
+          locationCallback(value);
+        },
+        controller: controller,
+        focusNode: focusNode,
+        decoration: new InputDecoration(
+          prefixIcon: prefixIcon,
+          suffixIcon: suffixIcon,
+          labelText: label,
+          filled: true,
+          fillColor: Colors.white,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.all(
+              Radius.circular(10.0),
+            ),
+            borderSide: BorderSide(
+              color: Colors.grey.shade400,
+              width: 2,
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.all(
+              Radius.circular(10.0),
+            ),
+            borderSide: BorderSide(
+              color: Colors.blue.shade300,
+              width: 2,
+            ),
+          ),
+          contentPadding: EdgeInsets.all(15),
+          hintText: hint,
+        ),
+      ),
+    );
   }
 
   @override
@@ -173,6 +261,127 @@ class _MapViewState extends State<MapView> {
                             ),
                           );
                         },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+
+            // 開智位置と目的位置を入力するためのUI
+            SafeArea(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black38
+                    ),
+                    width: width * 0.85,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 5.0, bottom: 5.0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Text(
+                            '場所検索',
+                            style: TextStyle(fontSize: 20.0, color: Colors.white),
+                          ),
+                          SizedBox(height: 10),
+                          _textField(
+                              label: '開始位置',
+                              hint: '開始位置を入力',
+                              prefixIcon: Icon(Icons.directions_walk),
+                              suffixIcon: IconButton(
+                                icon: Icon(Icons.my_location),
+                                onPressed: () {
+                                  startAddressController.text = _currentAddress;
+                                  _startAddress = _currentAddress;
+                                },
+                              ),
+                              controller: startAddressController,
+                              focusNode: startAddressFocusNode,
+                              width: width,
+                              locationCallback: (String value) {
+                                setState(() {
+                                  _startAddress = value;
+                                });
+                              }),
+                          SizedBox(height: 10),
+                          _textField(
+                              label: '目的位置',
+                              hint: '目的位置を入力',
+                              prefixIcon: Icon(Icons.directions_walk),
+                              controller: destinationAddressController,
+                              focusNode: desrinationAddressFocusNode,
+                              width: width,
+                              locationCallback: (String value) {
+                                setState(() {
+                                  _destinationAddress = value;
+                                });
+                              }),
+                          SizedBox(height: 10),
+                          Visibility(
+                            visible: _placeDistance == null ? false : true,
+                            child: Text(
+                              'DISTANCE: $_placeDistance km',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: 5),
+                          ElevatedButton(
+                            onPressed: (_startAddress != '' &&
+                                _destinationAddress != '')
+                                ? () async {
+                              // startAddressFocusNode.unfocus();
+                              // desrinationAddressFocusNode.unfocus();
+                              // setState(() {
+                              //   if (markers.isNotEmpty) markers.clear();
+                              //   if (polylines.isNotEmpty)
+                              //     polylines.clear();
+                              //   if (polylineCoordinates.isNotEmpty)
+                              //     polylineCoordinates.clear();
+                              //   _placeDistance = null;
+                              // });
+                              //
+                              // _calculateDistance().then((isCalculated) {
+                              //   if (isCalculated) {
+                              //     ScaffoldMessenger.of(context)
+                              //         .showSnackBar(
+                              //       SnackBar(
+                              //         content: Text(
+                              //             'Distance Calculated Sucessfully'),
+                              //       ),
+                              //     );
+                              //   } else {
+                              //     ScaffoldMessenger.of(context)
+                              //         .showSnackBar(
+                              //       SnackBar(
+                              //         content: Text(
+                              //             'Error Calculating Distance'),
+                              //       ),
+                              //     );
+                              //   }
+                              // });
+                            }
+                                : null,
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Text(
+                                'ルート検索'.toUpperCase(),
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20.0,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
