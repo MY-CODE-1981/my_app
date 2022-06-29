@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-// Google Mapsのパッケージをインポートする
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+// Geolocatorのパッケージをインポートする
+import 'package:geolocator/geolocator.dart';
 
 void main() {
   runApp(MyApp());
@@ -30,6 +31,41 @@ class _MapViewState extends State<MapView> {
   CameraPosition _initialLocation = CameraPosition(target: LatLng(0.0, 0.0));
   // マップの表示制御用
   late GoogleMapController mapController;
+
+  // 現在位置の記憶用
+  late Position _currentPosition;
+
+  // 現在位置の取得方法
+  _getCurrentLocation() async {
+    await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high)
+        .then((Position position) async {
+      setState(() {
+        // 位置を変数に格納する
+        _currentPosition = position;
+
+        print('CURRENT POS: $_currentPosition');
+
+        // カメラを現在位置に移動させる場合
+        mapController.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: LatLng(position.latitude, position.longitude),
+              zoom: 18.0,
+            ),
+          ),
+        );
+      });
+      // await _getAddress();
+    }).catchError((e) {
+      print(e);
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _getCurrentLocation();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -116,7 +152,7 @@ class _MapViewState extends State<MapView> {
                   // 現在地表示ボタン
                   child: ClipOval(
                     child: Material(
-                      color: Colors.orange.shade100, // ボタンを押す前のカラー
+                      color: Colors.blue.shade100, // ボタンを押す前のカラー
                       child: InkWell(
                         splashColor: Colors.blue, // ボタンを押した後のカラー
                         child: SizedBox(
@@ -129,8 +165,8 @@ class _MapViewState extends State<MapView> {
                             CameraUpdate.newCameraPosition(
                               CameraPosition(
                                 target: LatLng(
-                                    35.65872865514525, // 仮の緯度。後で変更
-                                    139.74543290592266 // 仮の経度。後で変更
+                                  _currentPosition.latitude,
+                                  _currentPosition.longitude,
                                 ),
                                 zoom: 18.0,
                               ),
