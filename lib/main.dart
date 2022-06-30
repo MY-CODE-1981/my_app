@@ -44,6 +44,8 @@ class _MapViewState extends State<MapView> {
   String _startAddress = '';
   String _destinationAddress = '';
   String? _placeDistance;
+
+  // マーカーリスト
   Set<Marker> markers = {};
 
   // 現在位置の取得方法
@@ -103,6 +105,100 @@ class _MapViewState extends State<MapView> {
     } catch (e) {
       print(e);
     }
+  }
+
+  // 2地点間の距離の算出方法
+  Future<bool> _RouteDistance() async {
+    try {
+      // 住所からプレースマークを取得する
+      List<Location>? startPlacemark = await locationFromAddress(_startAddress);
+      List<Location>? destinationPlacemark =
+      await locationFromAddress(_destinationAddress);
+
+      // 開始位置がユーザーの現在位置の場合、アドレスではなく、取得した現在位置の座標を使用する方が精度が良いため。
+      double startLatitude = _startAddress == _currentAddress
+          ? _currentPosition.latitude
+          : startPlacemark[0].latitude;
+
+      double startLongitude = _startAddress == _currentAddress
+          ? _currentPosition.longitude
+          : startPlacemark[0].longitude;
+
+      double destinationLatitude = destinationPlacemark[0].latitude;
+      double destinationLongitude = destinationPlacemark[0].longitude;
+
+      String startCoordinatesString = '($startLatitude, $startLongitude)';
+      String destinationCoordinatesString = '($destinationLatitude, $destinationLongitude)';
+
+      // 開始位置用マーカー
+      Marker startMarker = Marker(
+        markerId: MarkerId(startCoordinatesString),
+        position: LatLng(startLatitude, startLongitude),
+        infoWindow: InfoWindow(
+          title: 'Start $startCoordinatesString',
+          snippet: _startAddress,
+        ),
+        icon: BitmapDescriptor.defaultMarker,
+      );
+
+      // 目的位置用マーカー
+      Marker destinationMarker = Marker(
+        markerId: MarkerId(destinationCoordinatesString),
+        position: LatLng(destinationLatitude, destinationLongitude),
+        infoWindow: InfoWindow(
+          title: 'Destination $destinationCoordinatesString',
+          snippet: _destinationAddress,
+        ),
+        icon: BitmapDescriptor.defaultMarker,
+      );
+
+      // マーカーをリストに追加する
+      markers.add(startMarker);
+      markers.add(destinationMarker);
+
+      print(
+        'START COORDINATES: ($startLatitude, $startLongitude)',
+      );
+      print(
+        'DESTINATION COORDINATES: ($destinationLatitude, $destinationLongitude)',
+      );
+
+      // フレームに対する相対位置を確認するための計算を行い、それに応じてカメラをパン＆ズームする
+      double miny = (startLatitude <= destinationLatitude)
+          ? startLatitude
+          : destinationLatitude;
+      double minx = (startLongitude <= destinationLongitude)
+          ? startLongitude
+          : destinationLongitude;
+      double maxy = (startLatitude <= destinationLatitude)
+          ? destinationLatitude
+          : startLatitude;
+      double maxx = (startLongitude <= destinationLongitude)
+          ? destinationLongitude
+          : startLongitude;
+
+      double southWestLatitude = miny;
+      double southWestLongitude = minx;
+
+      double northEastLatitude = maxy;
+      double northEastLongitude = maxx;
+
+      // マップのカメラビュー内に2つのロケーションを収容する
+      mapController.animateCamera(
+        CameraUpdate.newLatLngBounds(
+          LatLngBounds(
+            northeast: LatLng(northEastLatitude, northEastLongitude),
+            southwest: LatLng(southWestLatitude, southWestLongitude),
+          ),
+          100.0,
+        ),
+      );
+
+      return true;
+    } catch (e) {
+      print(e);
+    }
+    return false;
   }
 
   // UI表示用
@@ -168,6 +264,7 @@ class _MapViewState extends State<MapView> {
         body: Stack(
           children: <Widget>[
             GoogleMap(
+              markers: Set<Marker>.from(markers),
               initialCameraPosition: _initialLocation,
               myLocationEnabled: true,
               myLocationButtonEnabled: false,
@@ -268,7 +365,6 @@ class _MapViewState extends State<MapView> {
               ),
             ),
 
-
             // 開智位置と目的位置を入力するためのUI
             SafeArea(
               child: Align(
@@ -338,36 +434,28 @@ class _MapViewState extends State<MapView> {
                             onPressed: (_startAddress != '' &&
                                 _destinationAddress != '')
                                 ? () async {
-                              // startAddressFocusNode.unfocus();
-                              // desrinationAddressFocusNode.unfocus();
-                              // setState(() {
-                              //   if (markers.isNotEmpty) markers.clear();
-                              //   if (polylines.isNotEmpty)
-                              //     polylines.clear();
-                              //   if (polylineCoordinates.isNotEmpty)
-                              //     polylineCoordinates.clear();
-                              //   _placeDistance = null;
-                              // });
-                              //
-                              // _calculateDistance().then((isCalculated) {
-                              //   if (isCalculated) {
-                              //     ScaffoldMessenger.of(context)
-                              //         .showSnackBar(
-                              //       SnackBar(
-                              //         content: Text(
-                              //             'Distance Calculated Sucessfully'),
-                              //       ),
-                              //     );
-                              //   } else {
-                              //     ScaffoldMessenger.of(context)
-                              //         .showSnackBar(
-                              //       SnackBar(
-                              //         content: Text(
-                              //             'Error Calculating Distance'),
-                              //       ),
-                              //     );
-                              //   }
-                              // });
+                              startAddressFocusNode.unfocus();
+                              desrinationAddressFocusNode.unfocus();
+
+                              _RouteDistance().then((isCalculated) {
+                                if (isCalculated) {
+                                  ScaffoldMessenger.of(context)
+                                      .showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                          'Distance Calculated Sucessfully'),
+                                    ),
+                                  );
+                                } else {
+                                  ScaffoldMessenger.of(context)
+                                      .showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                          'Error Calculating Distance'),
+                                    ),
+                                  );
+                                }
+                              });
                             }
                                 : null,
                             child: Padding(
