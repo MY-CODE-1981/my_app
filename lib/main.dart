@@ -12,7 +12,7 @@ void main() {
 
 class Secrets {
   // Google Maps APIキーをここに追加
-  static const API_KEY = 'AIzaSyAvdoCYwxjSLYar_sVFPwtW1gpUw151Y0o';
+  static const API_KEY = 'APIキー';
 }
 
 class MyApp extends StatelessWidget {
