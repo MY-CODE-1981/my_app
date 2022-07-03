@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-// geolocatorをインポートする
 import 'package:geolocator/geolocator.dart';
+// flutter_polyline_pointsをインポートする
+import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 
 void main() {
   runApp(MyApp());
+}
+
+class Secrets {
+  // Google Maps APIキーをここに追加
+  static const API_KEY = 'AIzaSyAvdoCYwxjSLYar_sVFPwtW1gpUw151Y0o';
 }
 
 class MyApp extends StatelessWidget {
@@ -48,6 +54,13 @@ class _MapViewState extends State<MapView> {
   // マーカーリスト
   Set<Marker> markers = {};
 
+  // PolylinePoints用オブジェクト
+  late PolylinePoints polylinePoints;
+  // 参加する座標のリスト
+  List<LatLng> polylineCoordinates = [];
+  // 2点間を結ぶポリラインを格納した地図
+  Map<PolylineId, Polyline> polylines = {};
+
   // 現在位置の取得方法
   _getCurrentLocation() async {
     await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high)
@@ -55,9 +68,7 @@ class _MapViewState extends State<MapView> {
       setState(() {
         // 位置を変数に格納する
         _currentPosition = position;
-
         print('CURRENT POS: $_currentPosition');
-
         // カメラを現在位置に移動させる場合
         mapController.animateCamera(
           CameraUpdate.newCameraPosition(
@@ -86,19 +97,13 @@ class _MapViewState extends State<MapView> {
       // 座標を使用して場所を取得する
       List<Placemark> p = await placemarkFromCoordinates(
           _currentPosition.latitude, _currentPosition.longitude);
-
       // 最も確率の高い結果を取得
       Placemark place = p[0];
-
       setState(() {
-
         // アドレスの構造化
-        _currentAddress =
-        "${place.name}, ${place.locality}, ${place.postalCode}, ${place.country}";
-
+        _currentAddress = "${place.name}, ${place.locality}, ${place.postalCode}, ${place.country}";
         // TextFieldのテキストを更新
         startAddressController.text = _currentAddress;
-
         // ユーザーの現在地を出発地とする設定
         _startAddress = _currentAddress;
       });
@@ -194,11 +199,51 @@ class _MapViewState extends State<MapView> {
         ),
       );
 
+      // 2つのマーカーの間にラインを表示する
+      await _createPolylines(startLatitude, startLongitude, destinationLatitude,  destinationLongitude);
+
+      // 距離計算用の変数
+      double totalDistance = 0.0;
+      setState(() {
+        _placeDistance = totalDistance.toStringAsFixed(2);
+      });
+
       return true;
     } catch (e) {
       print(e);
     }
     return false;
+  }
+
+  // 2地点間の経路を示すポリラインを作成する
+  _createPolylines(
+      double startLatitude,
+      double startLongitude,
+      double destinationLatitude,
+      double destinationLongitude,
+      ) async {
+    polylinePoints = PolylinePoints();
+    PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
+      Secrets.API_KEY, // Google Maps APIキー
+      PointLatLng(startLatitude, startLongitude),
+      PointLatLng(destinationLatitude, destinationLongitude),
+      travelMode: TravelMode.walking,
+    );
+
+    if (result.points.isNotEmpty) {
+      result.points.forEach((PointLatLng point) {
+        polylineCoordinates.add(LatLng(point.latitude, point.longitude));
+      });
+    }
+
+    PolylineId id = PolylineId('poly');
+    Polyline polyline = Polyline(
+      polylineId: id,
+      color: Colors.blue,
+      points: polylineCoordinates,
+      width: 3,
+    );
+    polylines[id] = polyline;
   }
 
   // UI表示用
@@ -256,7 +301,6 @@ class _MapViewState extends State<MapView> {
     // 画面の幅と高さを決定する
     var height = MediaQuery.of(context).size.height;
     var width = MediaQuery.of(context).size.width;
-
     return Container(
       height: height,
       width: width,
@@ -271,11 +315,11 @@ class _MapViewState extends State<MapView> {
               mapType: MapType.normal,
               zoomGesturesEnabled: true,
               zoomControlsEnabled: false,
+              polylines: Set<Polyline>.of(polylines.values),
               onMapCreated: (GoogleMapController controller) {
                 mapController = controller;
               },
             ),
-
             // ズームイン・ズームアウトのボタンを配置
             SafeArea(
               child: Align(
@@ -390,13 +434,13 @@ class _MapViewState extends State<MapView> {
                               label: '開始位置',
                               hint: '開始位置を入力',
                               prefixIcon: Icon(Icons.directions_walk),
-                              suffixIcon: IconButton(
-                                icon: Icon(Icons.my_location),
-                                onPressed: () {
-                                  startAddressController.text = _currentAddress;
-                                  _startAddress = _currentAddress;
-                                },
-                              ),
+                              // suffixIcon: IconButton(
+                              //   icon: Icon(Icons.my_location),
+                              //   onPressed: () {
+                              //     startAddressController.text = _currentAddress;
+                              //     _startAddress = _currentAddress;
+                              //   },
+                              // ),
                               controller: startAddressController,
                               focusNode: startAddressFocusNode,
                               width: width,
@@ -419,16 +463,16 @@ class _MapViewState extends State<MapView> {
                                 });
                               }),
                           SizedBox(height: 10),
-                          Visibility(
-                            visible: _placeDistance == null ? false : true,
-                            child: Text(
-                              'DISTANCE: $_placeDistance km',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
+                          // Visibility(
+                          //   visible: _placeDistance == null ? false : true,
+                          //   child: Text(
+                          //     'DISTANCE: $_placeDistance km',
+                          //     style: TextStyle(
+                          //       fontSize: 16,
+                          //       fontWeight: FontWeight.bold,
+                          //     ),
+                          //   ),
+                          // ),
                           SizedBox(height: 5),
                           ElevatedButton(
                             onPressed: (_startAddress != '' &&
@@ -436,26 +480,34 @@ class _MapViewState extends State<MapView> {
                                 ? () async {
                               startAddressFocusNode.unfocus();
                               desrinationAddressFocusNode.unfocus();
-
-                              _RouteDistance().then((isCalculated) {
-                                if (isCalculated) {
-                                  ScaffoldMessenger.of(context)
-                                      .showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                          'Distance Calculated Sucessfully'),
-                                    ),
-                                  );
-                                } else {
-                                  ScaffoldMessenger.of(context)
-                                      .showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                          'Error Calculating Distance'),
-                                    ),
-                                  );
-                                }
+                              setState(() {
+                                if (markers.isNotEmpty) markers.clear();
+                                if (polylines.isNotEmpty)
+                                  polylines.clear();
+                                if (polylineCoordinates.isNotEmpty)
+                                  polylineCoordinates.clear();
+                                // _placeDistance = null;
                               });
+
+                              _RouteDistance();//.then((isCalculated) {
+                              //   if (isCalculated) {
+                              //     ScaffoldMessenger.of(context)
+                              //         .showSnackBar(
+                              //       SnackBar(
+                              //         content: Text(
+                              //             'Distance Calculated Sucessfully'),
+                              //       ),
+                              //     );
+                              //   } else {
+                              //     ScaffoldMessenger.of(context)
+                              //         .showSnackBar(
+                              //       SnackBar(
+                              //         content: Text(
+                              //             'Error Calculating Distance'),
+                              //       ),
+                              //     );
+                              //   }
+                              // });
                             }
                                 : null,
                             child: Padding(
@@ -481,4 +533,5 @@ class _MapViewState extends State<MapView> {
       ),
     );
   }
+
 }
