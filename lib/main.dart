@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
-// flutter_polyline_pointsをインポートする
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
+// 三角関数をimportする
+import 'dart:math' show cos, sqrt, asin;
 
 void main() {
   runApp(MyApp());
@@ -204,6 +205,16 @@ class _MapViewState extends State<MapView> {
 
       // 距離計算用の変数
       double totalDistance = 0.0;
+      // 小さなセグメント間の距離を加算して総距離を計算する
+      for (int i = 0; i < polylineCoordinates.length - 1; i++) {
+        totalDistance += _coordinateDistance(
+          polylineCoordinates[i].latitude,
+          polylineCoordinates[i].longitude,
+          polylineCoordinates[i + 1].latitude,
+          polylineCoordinates[i + 1].longitude,
+        );
+      }
+      // 表示用の変数に計算結果を格納
       setState(() {
         _placeDistance = totalDistance.toStringAsFixed(2);
       });
@@ -213,6 +224,16 @@ class _MapViewState extends State<MapView> {
       print(e);
     }
     return false;
+  }
+
+  // 2つの座標間の距離の計算式
+  double _coordinateDistance(lat1, lon1, lat2, lon2) {
+    var p = 0.017453292519943295;
+    var c = cos;
+    var a = 0.5 -
+        c((lat2 - lat1) * p) / 2 +
+        c(lat1 * p) * c(lat2 * p) * (1 - c((lon2 - lon1) * p)) / 2;
+    return 12742 * asin(sqrt(a));
   }
 
   // 2地点間の経路を示すポリラインを作成する
@@ -434,13 +455,6 @@ class _MapViewState extends State<MapView> {
                               label: '開始位置',
                               hint: '開始位置を入力',
                               prefixIcon: Icon(Icons.directions_walk),
-                              // suffixIcon: IconButton(
-                              //   icon: Icon(Icons.my_location),
-                              //   onPressed: () {
-                              //     startAddressController.text = _currentAddress;
-                              //     _startAddress = _currentAddress;
-                              //   },
-                              // ),
                               controller: startAddressController,
                               focusNode: startAddressFocusNode,
                               width: width,
@@ -463,16 +477,16 @@ class _MapViewState extends State<MapView> {
                                 });
                               }),
                           SizedBox(height: 10),
-                          // Visibility(
-                          //   visible: _placeDistance == null ? false : true,
-                          //   child: Text(
-                          //     'DISTANCE: $_placeDistance km',
-                          //     style: TextStyle(
-                          //       fontSize: 16,
-                          //       fontWeight: FontWeight.bold,
-                          //     ),
-                          //   ),
-                          // ),
+                          Visibility(
+                            visible: _placeDistance == null ? false : true,
+                            child: Text(
+                              'DISTANCE: $_placeDistance km',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16
+                              ),
+                            ),
+                          ),
                           SizedBox(height: 5),
                           ElevatedButton(
                             onPressed: (_startAddress != '' &&
@@ -486,28 +500,10 @@ class _MapViewState extends State<MapView> {
                                   polylines.clear();
                                 if (polylineCoordinates.isNotEmpty)
                                   polylineCoordinates.clear();
-                                // _placeDistance = null;
+                                _placeDistance = null;
                               });
 
-                              _RouteDistance();//.then((isCalculated) {
-                              //   if (isCalculated) {
-                              //     ScaffoldMessenger.of(context)
-                              //         .showSnackBar(
-                              //       SnackBar(
-                              //         content: Text(
-                              //             'Distance Calculated Sucessfully'),
-                              //       ),
-                              //     );
-                              //   } else {
-                              //     ScaffoldMessenger.of(context)
-                              //         .showSnackBar(
-                              //       SnackBar(
-                              //         content: Text(
-                              //             'Error Calculating Distance'),
-                              //       ),
-                              //     );
-                              //   }
-                              // });
+                              _RouteDistance();
                             }
                                 : null,
                             child: Padding(
